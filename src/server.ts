@@ -33,7 +33,7 @@ server.on("upgrade", (req, socket, head) => {
 
   wss.handleUpgrade(req, socket, head, (ws) => handler(ws));
 });
-
-server.listen(3000, "0.0.0.0", () => {
-  console.log("WS server running on 3000 (LAN enabled)");
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`WS server running on `+PORT+` (LAN enabled)`);
 });
