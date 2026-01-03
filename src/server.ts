@@ -1,39 +1,68 @@
 import http from "http";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
+
 import { createConnection } from "./handlers/offer";
 import { answerConnection } from "./handlers/answer";
 import { reconnectHandler } from "./handlers/reconnect";
 import { getRoomData } from "./handlers/getRoomData";
 import { presistConnection } from "./handlers/persist";
 
-const server = http.createServer();
-
-// Send a simple response for normal HTTP requests
-server.on("request", (req, res) => {
+const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("WebSocket Server Running (HTTP OK)");
 });
 
-// Create WS server
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ server });
 
-// Your WebSocket routing table
-const routes: Record<string, any> = {
-  "/create-connection": createConnection,
-  "/answer-connection": answerConnection,
-  "/connection-reconnect": reconnectHandler,
-  "/get-roomdata": getRoomData,
-  "/persist-connection": presistConnection,
-};
+wss.on("connection", (ws: WebSocket) => {
+  console.log("WS connected");
 
-// Upgrade handler for WS paths
-server.on("upgrade", (req, socket, head) => {
-  const handler = routes[req.url || ""];
-  if (!handler) return socket.destroy(); // invalid path → close
+  ws.on("message", (raw: string) => {
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return;
+    }
 
-  wss.handleUpgrade(req, socket, head, (ws) => handler(ws));
+    const { type, payload } = data;
+
+    switch (type) {
+      case "persist-connection":
+        presistConnection(ws, payload);
+        break;
+
+      case "create-connection":
+        createConnection(ws, payload);
+        break;
+
+      case "answer-connection":
+        answerConnection(ws, payload);
+        break;
+
+      case "get-roomdata":
+        getRoomData(ws, payload);
+        break;
+
+      case "connection-reconnect":
+        reconnectHandler(ws, payload);
+        break;
+
+      case "ping":
+        ws.send(JSON.stringify({ type: "pong" }));
+        break;
+
+      default:
+        console.warn("Unknown WS message type:", type);
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("WS closed");
+  });
 });
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`WS server running on `+PORT+` (LAN enabled)`);
+  console.log(`WS server running on ${PORT}`);
 });
